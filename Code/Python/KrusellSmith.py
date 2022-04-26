@@ -8,7 +8,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.6.0
+#       jupytext_version: 1.13.7
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -22,7 +22,7 @@
 #     name: python
 #     nbconvert_exporter: python
 #     pygments_lexer: ipython3
-#     version: 3.7.3
+#     version: 3.8.8
 # ---
 
 # %% [markdown]
@@ -30,7 +30,7 @@
 #
 # - Original version by Tim Munday 
 # - Comments and extensions by Tao Wang
-# - Further edits by Chris Carroll
+# - Further edits by Chris Carroll and David Osten
 
 # %% [markdown]
 # [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/econ-ark/DemARK/master?filepath=notebooks%2FKrusellSmith.ipynb)
@@ -147,37 +147,13 @@
 # #### The Consumer
 
 # %% code_folding=[0, 6]
-# Import generic setup tools
-
-# This is a jupytext paired notebook that autogenerates KrusellSmith.py
-# which can be executed from a terminal command line via "ipython KrusellSmith.py"
-# But a terminal does not permit inline figures, so we need to test jupyter vs terminal
-# Google "how can I check if code is executed in the ipython notebook"
-def in_ipynb():
-    try:
-        if str(type(get_ipython())) == "<class 'ipykernel.zmqshell.ZMQInteractiveShell'>":
-            return True
-        else:
-            return False
-    except NameError:
-        return False
-
-# Determine whether to make the figures inline (for spyder or jupyter)
-# vs whatever is the automatic setting that will apply if run from the terminal
-if in_ipynb():
-    # %matplotlib inline generates a syntax error when run from the shell
-    # so do this instead
-    get_ipython().run_line_magic('matplotlib', 'inline') 
-else:
-    get_ipython().run_line_magic('matplotlib', 'auto') 
-
 # Import the plot-figure library matplotlib
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from copy import deepcopy
-from HARK.utilities import plotFuncs, plotFuncsDer, make_figs
+from HARK.utilities import plot_funcs, plot_funcs_der, make_figs
 from HARK.distribution import DiscreteDistribution
 
 # %% code_folding=[0]
@@ -288,7 +264,20 @@ ell_eb = 1.0/prb_eb   # 1=pe_g*ell_ge+pu_b*ell_gu=pe_b*ell_be+pu_b*ell_gu
 #   idiosyncratic persistent income level by state (KS have no persistent shocks p_ind is always 1.0)
 #   idiosyncratic transitory income level by state
 
-KSAgent.IncomeDstn[0] = [
+
+#Need to initialize Income Shock Distribution:
+KSAgent.IncShkDstn = [                                                              
+     DiscreteDistribution(np.array([prb_eg,prb_ug]), 
+                          [np.array([p_ind,p_ind]),
+                           np.array([ell_eg,ell_ug])]), # Agg state good
+     DiscreteDistribution(np.array([prb_eb,prb_ub]),
+                          [np.array([p_ind,p_ind]),
+                           np.array([ell_eb,ell_ub])])  # Agg state bad
+]
+
+
+#We can now subscript the Income Shock Distribution:
+KSAgent.IncShkDstn[0] = [                                                              
      DiscreteDistribution(np.array([prb_eg,prb_ug]), 
                           [np.array([p_ind,p_ind]),
                            np.array([ell_eg,ell_ug])]), # Agg state good
@@ -356,6 +345,8 @@ KSAggShkDstn = [
 
 KSEconomy.AggShkDstn = KSAggShkDstn
 
+# %%
+
 # %% [markdown]
 # #### Summing Up
 #
@@ -374,9 +365,9 @@ KSEconomy.AggShkDstn = KSAggShkDstn
 # %% code_folding=[]
 # Construct the economy, make an initial history, then solve 
 
-KSAgent.getEconomyData(KSEconomy) # Makes attributes of the economy, attributes of the agent
+KSAgent.get_economy_data(KSEconomy) # Makes attributes of the economy, attributes of the agent
 
-KSEconomy.makeAggShkHist() # Make a simulated history of the economy
+KSEconomy.make_AggShkHist() # Make a simulated history of the economy
 
 # Set tolerance level. 
 
@@ -407,9 +398,9 @@ plt.show()
 plt.clf()
 
 print('Consumption function at each aggregate market resources gridpoint (in general equilibrium):')
-KSAgent.unpackcFunc()
+KSAgent.unpack('cFunc')
 m_grid = np.linspace(0,10,200)
-KSAgent.unpackcFunc()
+KSAgent.unpack('cFunc')
 for M in KSAgent.Mgrid:
     c_at_this_M = KSAgent.solution[0].cFunc[0](m_grid,M*np.ones_like(m_grid)) #Have two consumption functions, check this
     plt.plot(m_grid,c_at_this_M)
@@ -418,9 +409,9 @@ plt.show()
 plt.clf()
 
 print('Savings at each individual market resources gridpoint (in general equilibrium):')
-KSAgent.unpackcFunc()
+KSAgent.unpack('cFunc')
 m_grid = np.linspace(0,10,200)
-KSAgent.unpackcFunc()
+KSAgent.unpack('cFunc')
 for M in KSAgent.Mgrid:
     s_at_this_M = m_grid-KSAgent.solution[0].cFunc[1](m_grid,M*np.ones_like(m_grid))
     c_at_this_M = KSAgent.solution[0].cFunc[1](m_grid,M*np.ones_like(m_grid)) #Have two consumption functions, check this
@@ -435,7 +426,7 @@ plt.show()
 #
 
 # %%
-sim_wealth = KSEconomy.reap_state['aLvlNow'][0]
+sim_wealth = KSEconomy.reap_state['aLvl'][0]
 
 
 print("The mean of individual wealth is "+ str(sim_wealth.mean()) + ";\n the standard deviation is "
@@ -443,7 +434,7 @@ print("The mean of individual wealth is "+ str(sim_wealth.mean()) + ";\n the sta
 
 # %% code_folding=[]
 # Get some tools for plotting simulated vs actual wealth distributions
-from HARK.utilities import getLorenzShares, getPercentiles
+from HARK.utilities import get_lorenz_shares, get_percentiles
 
 # The cstwMPC model conveniently has data on the wealth distribution 
 # from the U.S. Survey of Consumer Finances
@@ -454,8 +445,8 @@ SCF_wealth, SCF_weights = load_SCF_wealth_weights()
 # Construct the Lorenz curves and plot them
 
 pctiles = np.linspace(0.001,0.999,15)
-SCF_Lorenz_points = getLorenzShares(SCF_wealth,weights=SCF_weights,percentiles=pctiles)
-sim_Lorenz_points = getLorenzShares(sim_wealth,percentiles=pctiles)
+SCF_Lorenz_points = get_lorenz_shares(SCF_wealth,weights=SCF_weights,percentiles=pctiles)
+sim_Lorenz_points = get_lorenz_shares(sim_wealth,percentiles=pctiles)
 
 # Plot 
 plt.figure(figsize=(5,5))
@@ -522,14 +513,14 @@ KSEconomy_sim = CobbDouglasMarkovEconomy(agents = MyTypes, **KSEconomyDictionary
 KSEconomy_sim.AggShkDstn = KSAggShkDstn # Agg shocks are the same as defined earlier
 
 for ThisType in MyTypes:
-    ThisType.getEconomyData(KSEconomy_sim) # Makes attributes of the economy, attributes of the agent
+    ThisType.get_economy_data(KSEconomy_sim) # Makes attributes of the economy, attributes of the agent
 
-KSEconomy_sim.makeAggShkHist() # Make a simulated prehistory of the economy
+KSEconomy_sim.make_AggShkHist() # Make a simulated prehistory of the economy
 KSEconomy_sim.solve()          # Solve macro problem by getting a fixed point dynamic rule
 
 # %% code_folding=[]
 # Get the level of end-of-period assets a for all types of consumers
-aLvl_all = np.concatenate([KSEconomy_sim.reap_state['aLvlNow'][i] for i in range(len(MyTypes))])
+aLvl_all = np.concatenate([KSEconomy_sim.reap_state['aLvl'][i] for i in range(len(MyTypes))])
 
 print('Aggregate capital to income ratio is ' + str(np.mean(aLvl_all)))
 
@@ -537,9 +528,9 @@ print('Aggregate capital to income ratio is ' + str(np.mean(aLvl_all)))
 # Plot the distribution of wealth across all agent types
 sim_3beta_wealth = aLvl_all
 pctiles = np.linspace(0.001,0.999,15)
-sim_Lorenz_points = getLorenzShares(sim_wealth,percentiles=pctiles)
-SCF_Lorenz_points = getLorenzShares(SCF_wealth,weights=SCF_weights,percentiles=pctiles)
-sim_3beta_Lorenz_points = getLorenzShares(sim_3beta_wealth,percentiles=pctiles)
+sim_Lorenz_points = get_lorenz_shares(sim_wealth,percentiles=pctiles)
+SCF_Lorenz_points = get_lorenz_shares(SCF_wealth,weights=SCF_weights,percentiles=pctiles)
+sim_3beta_Lorenz_points = get_lorenz_shares(sim_3beta_wealth,percentiles=pctiles)
 
 ## Plot
 plt.figure(figsize=(5,5))
@@ -557,13 +548,13 @@ plt.show()
 
 # %% code_folding=[]
 # The mean levels of wealth for the three types of consumer are 
-[np.mean(KSEconomy_sim.reap_state['aLvlNow'][0]),np.mean(KSEconomy_sim.reap_state['aLvlNow'][1]),np.mean(KSEconomy_sim.reap_state['aLvlNow'][2])]
+[np.mean(KSEconomy_sim.reap_state['aLvl'][0]),np.mean(KSEconomy_sim.reap_state['aLvl'][1]),np.mean(KSEconomy_sim.reap_state['aLvl'][2])]
 
 # %% code_folding=[]
 # Plot the distribution of wealth 
 for i in range(len(MyTypes)):
     if i<=2:
-        plt.hist(np.log(KSEconomy_sim.reap_state['aLvlNow'][i])\
+        plt.hist(np.log(KSEconomy_sim.reap_state['aLvl'][i])\
                  ,label=r'$\beta$='+str(round(DiscFac_dstn[i],4))\
                  ,bins=np.arange(-2.,np.log(max(aLvl_all)),0.05))
         plt.yticks([])
@@ -631,9 +622,9 @@ KSeconomy = KrusellSmithEconomy()
 KSeconomy.verbose = False
 KStype = KrusellSmithType()
 KStype.cycles = 0
-KStype.getEconomyData(KSeconomy)
+KStype.get_economy_data(KSeconomy)
 KSeconomy.agents = [KStype]
-KSeconomy.makeMrkvHist()
+KSeconomy.make_Mrkv_history()
 
 # %%
 # Solve the Krusell-Smith economy
@@ -652,7 +643,7 @@ for j in range(4):
     plt.xlabel(r'Idiosyncratic market resources $m$')
     plt.ylabel(r'Consumption $c$')
     plt.title('Consumption function by aggregate market resources: ' + state_names[j])
-    plotFuncs(KStype.solution[0].cFunc[j].xInterpolators, 0., 50.)
+    plot_funcs(KStype.solution[0].cFunc[j].xInterpolators, 0., 50.)
 
 # %%
 # Extract history of aggregate capital and run a serial autoregression
